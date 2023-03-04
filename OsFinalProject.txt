@@ -1,0 +1,168 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+
+#define MAX_PROCESSES 50
+#define MAX_LEVELS 3
+#define TIME_QUANTUM_Q0 8
+#define TIME_QUANTUM_Q1 16
+
+// Process structure
+typedef struct {
+    int pid;
+    int burst_time;
+    int priority;
+    int wait_time;
+    int turn_around_time;
+} Process;
+
+// Queue structure for each level
+typedef struct Queue {
+    int front, rear, size;
+    unsigned capacity;
+    Process* processes;
+} Queue;
+
+// Function to create a queue of given capacity
+Queue* create_queue(unsigned capacity) {
+    Queue* queue = (Queue*) malloc(sizeof(Queue));
+    queue->capacity = capacity;
+    queue->front = queue->size = 0;
+    queue->rear = capacity - 1;
+    queue->processes = (Process*) malloc(queue->capacity * sizeof(Process));
+    return queue;
+}
+
+// Function to check if the queue is full
+bool is_full(Queue* queue) {
+    return (queue->size == queue->capacity);
+}
+
+// Function to check if the queue is empty
+bool is_empty(Queue* queue) {
+    return (queue->size == 0);
+}
+
+// Function to add an item to the queue
+void enqueue(Queue* queue, Process process) {
+    if (is_full(queue)) {
+        return;
+    }
+    queue->rear = (queue->rear + 1) % queue->capacity;
+    queue->processes[queue->rear] = process;
+    queue->size = queue->size + 1;
+}
+
+// Function to remove an item from the queue
+Process dequeue(Queue* queue) {
+    if (is_empty(queue)) {
+        return (Process){0, 0, 0, 0, 0};
+    }
+    Process process = queue->processes[queue->front];
+    queue->front = (queue->front + 1) % queue->capacity;
+    queue->size = queue->size - 1;
+    return process;
+}
+
+// Function to get the front item from the queue
+Process front(Queue* queue) {
+    if (is_empty(queue)) {
+        return (Process){0, 0, 0, 0, 0};
+    }
+    return queue->processes[queue->front];
+}
+
+// Function to get the rear item from the queue
+Process rear(Queue* queue) {
+    if (is_empty(queue)) {
+        return (Process){0, 0, 0, 0, 0};
+    }
+    return queue->processes[queue->rear];
+}
+
+// Function to execute the processes using multilevel feedback queue scheduler
+void execute_processes(Queue* queue[MAX_LEVELS], int quantum[MAX_LEVELS], int n, int m) {
+    int time = 0;
+    int level = 0;
+   
+    while (1) {
+        bool done = true;
+        for (int i = 0; i < n; i++) {
+            Process p = queue[level]->processes[i];
+            if (p.burst_time > 0) {
+                done = false;
+                if (p.burst_time > quantum[level]) {
+                    time += quantum[level];
+                    p.burst_time -= quantum[level];
+                } else {
+                    time = time + p.burst_time;
+                    p.wait_time = time - p.burst_time;
+                    p.burst_time = 0;
+                }
+                queue[level]->processes[i] = p;
+            }
+        }
+
+        // Move the process to the next higher priority level
+        if (level == MAX_LEVELS - 1) {
+            level = 0;
+        } else {
+            level++;
+        }
+
+        if (done == true) {
+            break;
+        }
+    }
+    
+    int total_wait_time = 0;
+    int total_around_time = 0;
+    int response_time = 0;
+    int throughput = 0;
+    // Calculate response time, throughput, and average waiting time
+    
+    for (int i = 0; i < n; i++) {
+        Process p = queue[MAX_LEVELS - 1]->processes[i];
+        response_time += p.wait_time;
+        throughput += p.turn_around_time;
+        total_wait_time += p.wait_time;
+    }
+    double average_wait_time = total_wait_time / n;
+    
+    // Display results
+    printf("Response time: %lf milliseconds\n", (double)response_time / n);
+    printf("Throughput: %lf processes per second\n", (double)n / ((double)time / 1000.0));
+    printf("Average waiting time: %lf milliseconds\n", (double)average_wait_time);
+}
+
+int main() {
+    int n, m;
+    printf("Enter the number of processes: ");
+    scanf("%d", &n);
+    printf("Enter the number of levels in the scheduler: ");
+    scanf("%d", &m);
+
+    Queue* queue[MAX_LEVELS];
+    int quantum[MAX_LEVELS];
+
+    // Create queues and set time quantum for each level
+    for (int i = 0; i < m; i++) {
+        queue[i] = create_queue(MAX_PROCESSES);
+        printf("Enter time quantum for level %d: ", i);
+        scanf("%d", &quantum[i]);
+    }
+
+    // Add processes to queue 0
+    for (int i = 0; i < n; i++) {
+        int burst_time;
+        printf("Enter burst time for process %d: ", i + 1);
+        scanf("%d", &burst_time);
+        Process p = {i + 1, burst_time, 0, 0, 0};
+        enqueue(queue[0], p);
+    }
+    
+    // Execute processes using multilevel feedback queue scheduler
+    execute_processes(queue, quantum, n, m);
+    
+    return 0;
+}
